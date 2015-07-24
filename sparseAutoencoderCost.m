@@ -13,15 +13,6 @@ function [cost,grad] = sparseAutoencoderCost(theta, visibleSize, hiddenSize, ...
 % We first convert theta to the (W1, W2, b1, b2) matrix/vector format, so that this 
 % follows the notation convention of the lecture notes. 
 
-
-% W1 is a vector which is of size (number of input units)*(number of hidden units)
-%     (the weights from each input to each hidden unit)
-% b1 is a vector of size (number of hidden units)
-%     (the bias of each hidden unit)
-% W2 and b2 are the same, but for the connection from the hidden units to the output units
-
-rho = sparsityParam;
-
 W1 = reshape(theta(1:hiddenSize*visibleSize), hiddenSize, visibleSize);
 W2 = reshape(theta(hiddenSize*visibleSize+1:2*hiddenSize*visibleSize), visibleSize, hiddenSize);
 b1 = theta(2*hiddenSize*visibleSize+1:2*hiddenSize*visibleSize+hiddenSize);
@@ -32,7 +23,7 @@ b2 = theta(2*hiddenSize*visibleSize+hiddenSize+1:end);
 cost = 0;
 W1grad = zeros(size(W1)); 
 W2grad = zeros(size(W2));
-b1grad = zeros(size(b1)); 
+b1grad = zeros(size(b1));
 b2grad = zeros(size(b2));
 
 %% ---------- YOUR CODE HERE --------------------------------------
@@ -49,85 +40,42 @@ b2grad = zeros(size(b2));
 % 
 % Stated differently, if we were using batch gradient descent to optimize the parameters,
 % the gradient descent update to W1 would be W1 := W1 - alpha * W1grad, and similarly for W2, b1, b2. 
-% 
-
-% make a 1's row vector
-numSamples = size(data,2);
-rowVecOnes = ones(1,numSamples);
-
-%%%%%%%%%%%%%%%%%%%
-% FORWARD PASS section begin
-%%%%%%%%%%%%%%%%%%
 %
-% Get the input and output of the hidden layer (output is the "activiation" of that layer)
-hiddenInputs = W1*data + b1*rowVecOnes;  %(25x64)*(64x1000) + (25x1)*(1x1000)   = (25x1000) + (25x1000) = 25x1000
-hiddenOutputs = sigmoid(hiddenInputs);   %(25x1000)
+
+m=size(data,2);
+%feedforward
+net.a{1}=data;%64*10000
+net.a{2}=sigmoid(bsxfun(@plus,W1*net.a{1},b1));%25*10000
+net.a{3}=sigmoid(bsxfun(@plus,W2*net.a{2},b2));%64*10000
 
 %
-% Get the input and output of the output layer (output is the "activiation" of that layer)
-finalInputs = W2*hiddenOutputs + b2*rowVecOnes; %  (64x25)*(25x1000) + (64x1)(1x1000) = 64x1000
-outputs = sigmoid(finalInputs);   % 64x1000
+[SUM_KL, de_KL]=KL_diver(net.a{2},sparsityParam);%sparsity penalty
 
-%
-% Calculate the average activation of the hidden units for the sparsity constraint
-rho_hiddenOutputs = (1.0/numSamples) * sum(hiddenOutputs,2);  % should be 25x1
+deW_KL=bsxfun(@times,   ...%25*64
+              (net.a{2}.*(1-net.a{2}))*net.a{1}'/m, ...
+              de_KL);
+deb_KL=de_KL.*sum(net.a{2}.*(1-net.a{2}),2) /m;%25*1
+%cost function Jsparse
+cost=1/m/2*sum(sum((net.a{3}-net.a{1}).^2))  ...     %squared error cost
+    +lambda/2*(sum(sum(W1.^2))+sum(sum(W2.^2)))  ... %weight decay term
+    +beta*SUM_KL;          %sparsity penalty
 
-%%%%%%%%%%%%%%%%%%%
-% FORWARD PASS section end
-%%%%%%%%%%%%%%%%%%
-
-%
-% NOTE: Layer 1 = input layer
-%       Layer 2 = hidden layer
-%       Layer 3 = output layer
-
-
-
-%
-% Now calculate the error terms for the output layer
-fprimeOutput = outputs.*(1-outputs);    % element wise ==> result is 64x1000 matrix
-deltaOutput = -(data - outputs) .* fprimeOutput;    % element wise ==> result is 64x1000 matrix
-%
-% Now calculate the error terms for the hidden layer
-fprimeHidden = hiddenOutputs.*(1-hiddenOutputs);   % element wise ==> result is 25x1000 matrix
-deltaHidden = (transpose(W2)*deltaOutput + beta * (-rho./rho_hiddenOutputs + ((1-rho)./(1.0-rho_hiddenOutputs)))*rowVecOnes).*fprimeHidden;  % (25x64)*(64x1000) .* (25x1000) = (25x1000)
-
-% 
-% Now calculate the partial derivatives
-delW1 = deltaHidden * transpose(data);   % (25x1000)*(1000x64) = 25x64
-%delW2 = deltaOutput * transpose(hiddenOutputs); % (64x1000)*(1000x25) = 64x25
-
-delW2 = deltaOutput * transpose(hiddenOutputs)  ; % (64x1000)*(1000x25) = 64x25
-
-delb1 = deltaHidden * transpose(rowVecOnes);     % (25x1000)*(1000x1) = 25x1
-delb2 = deltaOutput * transpose(rowVecOnes);     % (64x1000)*(1000x1) = 64x1
-
-% Now sum
-W1grad = delW1/numSamples + lambda*W1;
-W2grad = delW2/numSamples + lambda*W2;
-b1grad = delb1/numSamples;
-b2grad = delb2/numSamples;
-%
-% Calculate cost function
-error = (outputs - data); % (64x1000)
-
-errorSQ = error.*error;   % (64x1000)
-
-cost = (0.5/numSamples)*sum(sum(errorSQ));  % sum both rows and columns
-
-
-
-
-%
-% Now add in the regularization term
-regularization = 0.5*lambda*( sum(sum(W1.*W1)) + sum(sum(W2.*W2)) ); 
-
-cost = cost + regularization;
-
-%
-% Add the sparsity constraint to the cost
-sparseTerm = rho * log(rho ./ rho_hiddenOutputs) + (1-rho) * log((1.0-rho)./(1.0-rho_hiddenOutputs));
-cost = cost + beta*sum(sparseTerm);
+%backpropagation
+net.delta{3}= -(net.a{1}-net.a{3})  .*  net.a{3}  .*  (1-net.a{3});%64*10000
+net.delta{2}= W2' * net.delta{3}    .*  net.a{2}  .*  (1-net.a{2});%25*10000  %squared error delta
+% net.delta{2}= bsxfun(@plus, ...   %25*10000
+%              W2' * net.delta{3}     .*  net.a{2}  .*  (1-net.a{2}) ... %squared error delta
+%              ,beta*de_KL);%sparsity penalty
+%gradient descent
+W2grad= 1/m * net.delta{3} * net.a{2}' ...%64*25 %squared error grad
+      + lambda * W2;%weight decay term
+b2grad= sum(net.delta{3},2) /m;%64*1
+W1grad= 1/m * net.delta{2} * net.a{1}' ...%25*64 %squared error grad
+      + beta*deW_KL   ...%sparsity penalty
+      + lambda * W1;%weight decay term
+% W1grad= 1/m * net.delta{2} * net.a{1}' ...%25*64 %squared error grad
+%       + lambda * W1;%weight decay term
+b1grad= sum(net.delta{2},2) /m + beta*deb_KL;%25*1
 
 %-------------------------------------------------------------------
 % After computing the cost and gradient, we will convert the gradients back
@@ -148,3 +96,13 @@ function sigm = sigmoid(x)
     sigm = 1 ./ (1 + exp(-x));
 end
 
+%sparsity penalty
+%SUM_KL:sum of KL
+%de_KL :derivative of KL
+function [SUM_KL, de_KL]= KL_diver(a2,rhoParam)
+    rho=sum(a2,2)/size(a2,2);
+    SUM_KL=sum(rhoParam*log(rhoParam./rho)+(1-rhoParam)*log((1-rhoParam)./(1-rho)));
+    de_KL =(-rhoParam./rho+(1-rhoParam)./(1-rho));
+end
+% SUM_KL=sum(rho.*log(rho/rhoParam)+(1-rho).*log((1-rho)/(1-rhoParam)));
+%     de_KL =-rho/rhoParam + (1-rho)/(1-rhoParam);

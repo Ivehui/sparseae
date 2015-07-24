@@ -1,5 +1,6 @@
 %% CS294A/CS294W Programming Assignment Starter Code
 
+%addpath(genpath('sparseae_exercise'));
 %  Instructions
 %  ------------
 % 
@@ -13,6 +14,8 @@
 %% STEP 0: Here we provide the relevant parameters values that will
 %  allow your sparse autoencoder to get good filters; you do not need to 
 %  change the parameters below.
+clear all
+clc
 
 visibleSize = 8*8;   % number of input units 
 hiddenSize = 25;     % number of hidden units 
@@ -20,16 +23,19 @@ sparsityParam = 0.01;   % desired average activation of the hidden units.
                      % (This was denoted by the Greek alphabet rho, which looks like a lower-case "p",
 		     %  in the lecture notes). 
 lambda = 0.0001;     % weight decay parameter       
-beta = 3;            % weight of sparsity penalty term       
+beta = 3;            % weight of sparsity penalty term      
+
+% lambda = 0;          % weight decay parameter       
+% beta = 0;            % weight of sparsity penalty term      
 
 %%======================================================================
 %% STEP 1: Implement sampleIMAGES
 %
 %  After implementing sampleIMAGES, the display_network command should
-%  display a random sample of 200 patches from the dataset
+%  display a random sample of 204 patches from the dataset
 
 patches = sampleIMAGES;
-display_network(patches(:,randi(size(patches,2),200,1)),8);
+display_network(patches(:,randi(size(patches,2),204,1)),8);
 
 
 %  Obtain random parameters theta
@@ -62,6 +68,18 @@ theta = initializeParameters(hiddenSize, visibleSize);
 %  final submission of the visualized weights, please use parameters we 
 %  gave in Step 0 above.
 
+% % % % visibleSize = 8*8;   % number of input units 
+% % % % hiddenSize = 25;     % number of hidden units 
+% % % % sparsityParam = 0.01;   % desired average activation of the hidden units.
+% % % %                      % (This was denoted by the Greek alphabet rho, which looks like a lower-case "p",
+% % % % 		     %  in the lecture notes). 
+% % % % % lambda = 0;     % weight decay parameter       
+% % % % % beta = 0;            % weight of sparsity penalty term     
+% % % % lambda = 0.0001;     % weight decay parameter       
+% % % % beta = 3;            % weight of sparsity penalty term    
+% % % % patches=patches(:,1:10);
+% % % % theta=initializeParameters(hiddenSize, visibleSize);
+
 [cost, grad] = sparseAutoencoderCost(theta, visibleSize, hiddenSize, lambda, ...
                                      sparsityParam, beta, patches);
 
@@ -75,21 +93,21 @@ theta = initializeParameters(hiddenSize, visibleSize);
 % First, lets make sure your numerical gradient computation is correct for a
 % simple function.  After you have implemented computeNumericalGradient.m,
 % run the following: 
-%checkNumericalGradient();
+checkNumericalGradient();
 
 % Now we can use it to check your cost function and derivative calculations
 % for the sparse autoencoder.  
-%numgrad = computeNumericalGradient( @(x) sparseAutoencoderCost(x, visibleSize, ...
-%                                                  hiddenSize, lambda, ...
-%                                                  sparsityParam, beta, ...
-%                                                  patches), theta);
+numgrad = computeNumericalGradient( @(x) sparseAutoencoderCost(x, visibleSize, ...
+                                                  hiddenSize, lambda, ...
+                                                  sparsityParam, beta, ...
+                                                  patches), theta);
 
 % Use this to visually compare the gradients side by side
-%disp([numgrad grad]); 
+disp([numgrad grad]); 
 
 % Compare numerically computed gradients with the ones obtained from backpropagation
-%diff = norm(numgrad-grad)/norm(numgrad+grad);
-%disp(diff); % Should be small. In our implementation, these values are
+diff = norm(numgrad-grad)/norm(numgrad+grad);
+disp(diff); % Should be small. In our implementation, these values are
             % usually less than 1e-9.
 
             % When you got this working, Congratulations!!! 
